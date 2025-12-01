@@ -7,6 +7,7 @@ yarn-error.log*
 # Generated k6 scripts
 k6-script*.js
 *.backup
+.k6-config/
 
 # Test results
 results/

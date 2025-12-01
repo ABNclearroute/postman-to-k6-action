@@ -133,15 +133,19 @@ runs:
         STAGES_COUNT=$(yq eval ".profiles.$PROFILE.stages | length" "$PROFILES_CONFIG")
         
         if [ "$STAGES_COUNT" -gt 0 ]; then
-          # Use yq to output proper JSON for stages
-          STAGES_JSON=$(yq eval -o=json ".profiles.$PROFILE.stages" "$PROFILES_CONFIG")
+          # Create workspace directory for JSON files (persists across steps)
+          mkdir -p .k6-config
+          STAGES_FILE=".k6-config/stages.json"
+          THRESHOLDS_FILE=".k6-config/thresholds.json"
           
-          echo "stages-json=$STAGES_JSON" >> $GITHUB_OUTPUT
+          # Use yq to output proper JSON for stages and thresholds
+          yq eval -o=json ".profiles.$PROFILE.stages" "$PROFILES_CONFIG" > "$STAGES_FILE"
+          yq eval -o=json ".profiles.$PROFILE.thresholds" "$PROFILES_CONFIG" > "$THRESHOLDS_FILE"
           
-          # Use yq to output proper JSON for thresholds
-          THRESHOLDS_JSON=$(yq eval -o=json ".profiles.$PROFILE.thresholds" "$PROFILES_CONFIG")
+          # Store file paths in outputs (files persist in workspace)
+          echo "stages-file=$STAGES_FILE" >> $GITHUB_OUTPUT
+          echo "thresholds-file=$THRESHOLDS_FILE" >> $GITHUB_OUTPUT
           
-          echo "thresholds-json=$THRESHOLDS_JSON" >> $GITHUB_OUTPUT
         fi
       shell: bash
 
@@ -149,11 +153,21 @@ runs:
       id: merge-script
       run: |
         SCRIPT_FILE="${{ steps.generate-script.outputs.script-path }}"
-        STAGES_JSON="${{ steps.prepare-profile.outputs.stages-json }}"
-        THRESHOLDS_JSON="${{ steps.prepare-profile.outputs.thresholds-json }}"
+        STAGES_FILE="${{ steps.prepare-profile.outputs.stages-file }}"
+        THRESHOLDS_FILE="${{ steps.prepare-profile.outputs.thresholds-file }}"
         PROFILE_NAME="${{ inputs.load-profile }}"
         
-        if [ -z "$STAGES_JSON" ] || [ "$STAGES_JSON" == "null" ]; then
+        # Read JSON from files (files persist in workspace across steps)
+        if [ -f "$STAGES_FILE" ] && [ -f "$THRESHOLDS_FILE" ]; then
+          STAGES_JSON=$(cat "$STAGES_FILE")
+          THRESHOLDS_JSON=$(cat "$THRESHOLDS_FILE")
+        else
+          echo "Warning: Profile configuration files not found, using original script"
+          echo "final-script=$SCRIPT_FILE" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        if [ -z "$STAGES_JSON" ] || [ "$STAGES_JSON" == "null" ] || [ "$STAGES_JSON" == "" ]; then
           echo "No profile stages found, using original script"
           echo "final-script=$SCRIPT_FILE" >> $GITHUB_OUTPUT
           exit 0
@@ -235,9 +249,10 @@ runs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: k6-results-${{ inputs.load-profile }}-${{ github.run_id }}
+        name: k6-results-${{ inputs.load-profile }}-${{ github.run_id }}-${{ github.run_attempt }}
         path: |
           k6-script*.js
-          *.json
+          .k6-config/
         retention-days: 30
+        if-no-files-found: ignore
 
