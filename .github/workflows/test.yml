@@ -1,0 +1,76 @@
+name: Test Postman to k6 Action
+
+# -----------------------------------------------------------------------------
+# Test workflow using the sample Postman collection
+# -----------------------------------------------------------------------------
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'postman/**'
+      - 'action.yml'
+      - '.github/workflows/test.yml'
+
+jobs:
+  test-smoke:
+    name: Smoke Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Postman to k6 Load Test (Smoke)
+        id: run-test
+        uses: ./
+        with:
+          postman-collection: 'postman/collection.json'
+          load-profile: 'smoke'
+          profiles-config: 'profiles/load-profiles.yaml'
+
+      - name: Display Test Summary
+        if: always()
+        run: |
+          echo "## ✅ Smoke Test Completed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ steps.run-test.outputs.test-status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Script Path:** ${{ steps.run-test.outputs.k6-script-path }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Test Details" >> $GITHUB_STEP_SUMMARY
+          echo "- Profile: Smoke (5 VUs, 1 minute)" >> $GITHUB_STEP_SUMMARY
+          echo "- API: JSONPlaceholder Posts API" >> $GITHUB_STEP_SUMMARY
+          echo "- Collection: postman/collection.json" >> $GITHUB_STEP_SUMMARY
+        shell: bash
+
+  test-all-profiles:
+    name: Test All Load Profiles
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [smoke, load, stress, spike]
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Postman to k6 Load Test
+        id: run-test
+        uses: ./
+        with:
+          postman-collection: 'postman/collection.json'
+          load-profile: ${{ matrix.profile }}
+          profiles-config: 'profiles/load-profiles.yaml'
+
+      - name: Display Test Summary
+        if: always()
+        run: |
+          echo "## Load Test: ${{ matrix.profile }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ steps.run-test.outputs.test-status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Profile:** ${{ matrix.profile }}" >> $GITHUB_STEP_SUMMARY
+        shell: bash
+
