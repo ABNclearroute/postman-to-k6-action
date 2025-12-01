@@ -245,11 +245,26 @@ runs:
         fi
       shell: bash
 
+    - name: Prepare artifact name
+      if: always()
+      id: artifact-name
+      run: |
+        # Generate unique artifact name with timestamp and UUID
+        TIMESTAMP=$(date +%s)
+        if command -v uuidgen &> /dev/null; then
+          UUID=$(uuidgen | tr -d '-' | cut -c1-8)
+        else
+          UUID=$(cat /proc/sys/kernel/random/uuid 2>/dev/null | tr -d '-' | cut -c1-8 || openssl rand -hex 4)
+        fi
+        ARTIFACT_NAME="k6-results-${{ inputs.load-profile }}-${TIMESTAMP}-${UUID}"
+        echo "artifact-name=${ARTIFACT_NAME}" >> $GITHUB_OUTPUT
+      shell: bash
+
     - name: Upload k6 results
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: k6-results-${{ inputs.load-profile }}-${{ github.run_id }}-${{ github.run_attempt }}
+        name: ${{ steps.artifact-name.outputs.artifact-name }}
         path: |
           k6-script*.js
           .k6-config/
