@@ -4,12 +4,12 @@ A reusable GitHub Action that automatically converts Postman collections to k6 l
 
 ## Features
 
-- 🔄 **Runtime Conversion**: Automatically converts Postman collections to k6 scripts at runtime
-- 📊 **Load Profiles**: Pre-configured load profiles (smoke, load, stress, spike) with customizable thresholds
-- 🚀 **Distributed Execution**: Run different load profiles on different GitHub Actions runners
-- ⚙️ **Flexible Configuration**: Customize load profiles via YAML configuration
-- 📦 **Reusable**: Use as a composite action in any GitHub repository
-- 🔍 **Comprehensive Reporting**: Automatic artifact upload and test results
+- **Runtime Conversion**: Automatically converts Postman collections to k6 scripts at runtime
+- **Load Profiles**: Pre-configured load profiles (smoke, load, stress, spike) with customizable thresholds
+- **Distributed Execution**: Run different load profiles on different GitHub Actions runners
+- **Flexible Configuration**: Customize load profiles via YAML configuration
+- **Reusable**: Use as a composite action in any GitHub repository
+- **Comprehensive Reporting**: Automatic artifact upload and test results
 
 ## Quick Start
 
@@ -85,33 +85,33 @@ jobs:
 
 Quick validation test to verify basic functionality.
 
-- **Duration**: 1 minute
-- **Virtual Users**: 1-5
-- **Purpose**: Fast feedback on system availability
+- Duration: 1 minute
+- Virtual Users: 1-5
+- Purpose: Fast feedback on system availability
 
 ### Load Test
 
 Test system under expected normal load conditions.
 
-- **Duration**: ~9 minutes
-- **Virtual Users**: 10-50 (gradual ramp-up)
-- **Purpose**: Validate performance under normal conditions
+- Duration: ~9 minutes
+- Virtual Users: 10-50 (gradual ramp-up)
+- Purpose: Validate performance under normal conditions
 
 ### Stress Test
 
 Test system limits and breaking points.
 
-- **Duration**: ~15 minutes
-- **Virtual Users**: 50-200 (progressive increase)
-- **Purpose**: Identify maximum capacity and failure points
+- Duration: ~15 minutes
+- Virtual Users: 50-200 (progressive increase)
+- Purpose: Identify maximum capacity and failure points
 
 ### Spike Test
 
 Simulate sudden traffic surge to test system resilience.
 
-- **Duration**: ~3 minutes
-- **Virtual Users**: 10-100 (rapid spike)
-- **Purpose**: Test system behavior under sudden load changes
+- Duration: ~3 minutes
+- Virtual Users: 10-100 (rapid spike)
+- Purpose: Test system behavior under sudden load changes
 
 ## Configuration
 
@@ -236,12 +236,12 @@ See [`.github/workflows/example.yml`](.github/workflows/example.yml) for a compl
 
 ## How It Works
 
-1. **Validation**: Validates the Postman collection JSON file
-2. **Conversion**: Uses `@apideck/postman-to-k6` to convert the collection to a k6 script
-3. **Profile Configuration**: Loads the specified load profile from YAML configuration
-4. **Options Injection**: Merges load profile options (stages, thresholds) into the k6 script
-5. **Execution**: Runs k6 with the configured load profile
-6. **Artifacts**: Uploads test results and generated scripts as artifacts
+1. Validates the Postman collection JSON file
+2. Uses `@apideck/postman-to-k6` to convert the collection to a k6 script
+3. Loads the specified load profile from YAML configuration
+4. Merges load profile options (stages, thresholds) into the k6 script
+5. Runs k6 with the configured load profile
+6. Uploads test results and generated scripts as artifacts
 
 ## Requirements
 
@@ -251,12 +251,12 @@ See [`.github/workflows/example.yml`](.github/workflows/example.yml) for a compl
 
 ## Best Practices
 
-1. **Start with Smoke Tests**: Always run smoke tests first to validate basic functionality
-2. **Gradual Load Increase**: Use proper ramp-up times to avoid overwhelming your system
-3. **Set Realistic Thresholds**: Base thresholds on actual SLA requirements
-4. **Monitor Resources**: Watch system resources during stress tests
-5. **Test in Isolation**: Run load tests in dedicated environments when possible
-6. **Document Your Profiles**: Keep load profile configurations documented and version-controlled
+1. Start with smoke tests first to validate basic functionality
+2. Use proper ramp-up times to avoid overwhelming your system
+3. Base thresholds on actual SLA requirements
+4. Monitor system resources during stress tests
+5. Run load tests in dedicated environments when possible
+6. Keep load profile configurations documented and version-controlled
 
 ## Troubleshooting
 
@@ -265,9 +265,9 @@ See [`.github/workflows/example.yml`](.github/workflows/example.yml) for a compl
 Ensure the path to your Postman collection is correct relative to the repository root:
 
 ```yaml
-postman-collection: 'path/to/collection.json'  # ✅ Correct
-postman-collection: './collection.json'        # ✅ Also correct
-postman-collection: 'collection.json'          # ✅ Also correct
+postman-collection: 'path/to/collection.json'  # Correct
+postman-collection: './collection.json'        # Also correct
+postman-collection: 'collection.json'          # Also correct
 ```
 
 ### Profile Not Found
