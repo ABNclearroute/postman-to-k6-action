@@ -305,6 +305,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [Grafana k6](https://k6.io/) - Modern load testing tool
 - [Grafana k6 GitHub Actions](https://github.com/grafana/k6-action) - k6 GitHub Actions integration
 
+## Advantages
+
+This action provides numerous benefits including automated conversion, pre-built load profiles, CI/CD integration, cost-effectiveness, and more. See [ADVANTAGES.md](ADVANTAGES.md) for a comprehensive list of advantages and use cases.
+
 ## Support
 
 For issues, questions, or contributions, please open an issue on the GitHub repository.
