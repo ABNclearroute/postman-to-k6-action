@@ -155,7 +155,7 @@ function matchEndpointToMetadata(request, metadata) {
       }
       if (ep.path) {
         // Escape regex metacharacters, then replace placeholders with a segment matcher.
-        const placeholderToken = '__PLACEHOLDER__';
+        const placeholderToken = '__AI_METADATA_PLACEHOLDER_TOKEN__';
         const escaped = ep.path
           .replace(/\{[^}]+\}/g, placeholderToken) // temporarily mark placeholders
           .replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // escape regex chars
