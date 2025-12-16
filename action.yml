@@ -42,7 +42,7 @@ inputs:
     required: false
     default: 'false'
   ai-api-key:
-    description: 'API key for AI provider (use secrets, e.g., ${{ secrets.OPENAI_API_KEY }})'
+    description: 'API key for AI provider (use secrets in workflows, e.g., secrets.OPENAI_API_KEY)'
     required: false
     default: ''
   ai-provider:
