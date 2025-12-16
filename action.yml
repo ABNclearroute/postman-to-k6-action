@@ -362,8 +362,10 @@ runs:
         # Add JSON output if AI result analysis is enabled
         if [ "${{ inputs.enable-ai-result-analysis }}" == "true" ]; then
           mkdir -p .k6-config
-          ADDITIONAL_OPTIONS="$ADDITIONAL_OPTIONS --out json=.k6-config/k6-results.json"
-          echo "k6 results will be saved to .k6-config/k6-results.json for AI analysis"
+          RESULTS_FILE=".k6-config/k6-results.json"
+          ADDITIONAL_OPTIONS="$ADDITIONAL_OPTIONS --out json=$RESULTS_FILE"
+          echo "k6 results will be saved to $RESULTS_FILE for AI analysis"
+          echo "results-file=$RESULTS_FILE" >> $GITHUB_OUTPUT
         fi
         
         echo "Running k6 test with profile: ${{ inputs.load-profile }}"
@@ -384,6 +386,9 @@ runs:
       env:
         AI_API_KEY: ${{ inputs.ai-api-key }}
       run: |
+        echo "=== AI Result Analysis Step ==="
+        echo "Checking prerequisites..."
+        
         if [ -z "$AI_API_KEY" ]; then
           echo "Warning: AI result analysis enabled but ai-api-key not provided. Skipping AI analysis."
           echo "report-path=" >> $GITHUB_OUTPUT
@@ -393,11 +398,17 @@ runs:
         RESULTS_FILE=".k6-config/k6-results.json"
         OUTPUT_DIR=".k6-config"
         
+        echo "Looking for k6 results file: $RESULTS_FILE"
         if [ ! -f "$RESULTS_FILE" ]; then
-          echo "Warning: k6 results file not found: $RESULTS_FILE. AI analysis skipped."
+          echo "Warning: k6 results file not found: $RESULTS_FILE"
+          echo "Listing .k6-config directory contents:"
+          ls -la "$OUTPUT_DIR" || echo "Directory does not exist"
           echo "report-path=" >> $GITHUB_OUTPUT
           exit 0
         fi
+        
+        echo "Found results file: $RESULTS_FILE"
+        echo "File size: $(wc -c < "$RESULTS_FILE") bytes"
         
         # Build AI config JSON
         AI_CONFIG="{"
@@ -413,30 +424,42 @@ runs:
         AI_CONFIG="$AI_CONFIG\"maxRetries\":${{ inputs.ai-max-retries }}"
         AI_CONFIG="$AI_CONFIG}"
         
+        echo "AI Config: $(echo "$AI_CONFIG" | sed 's/"apiKey":"[^"]*"/"apiKey":"***"/')"
+        
         # Find script path
         SCRIPT_PATH=""
         for path in "scripts/ai-result-analyzer.js" "${{ github.action_path }}/scripts/ai-result-analyzer.js" "./scripts/ai-result-analyzer.js"; do
+          echo "Checking for script at: $path"
           if [ -f "$path" ]; then
             SCRIPT_PATH="$path"
+            echo "Found script at: $SCRIPT_PATH"
             break
           fi
         done
         
         if [ -z "$SCRIPT_PATH" ] || [ ! -f "$SCRIPT_PATH" ]; then
           echo "Error: ai-result-analyzer.js script not found"
+          echo "Current directory: $(pwd)"
+          echo "Listing scripts directory:"
+          ls -la scripts/ || echo "scripts directory not found"
           echo "report-path=" >> $GITHUB_OUTPUT
           exit 0
         fi
         
         # Export NODE_PATH if we installed packages
         export NODE_PATH=/tmp/node_modules:$NODE_PATH || true
+        echo "NODE_PATH: $NODE_PATH"
         
         PROFILE_NAME="${{ inputs.load-profile }}"
         echo "Running AI result analysis for profile: $PROFILE_NAME"
-        if node "$SCRIPT_PATH" "$RESULTS_FILE" "$AI_CONFIG" "$PROFILE_NAME" "$OUTPUT_DIR"; then
+        echo "Command: node \"$SCRIPT_PATH\" \"$RESULTS_FILE\" \"$AI_CONFIG\" \"$PROFILE_NAME\" \"$OUTPUT_DIR\""
+        
+        if node "$SCRIPT_PATH" "$RESULTS_FILE" "$AI_CONFIG" "$PROFILE_NAME" "$OUTPUT_DIR" 2>&1; then
           REPORT_FILE="$OUTPUT_DIR/ai-insights-report.md"
+          echo "Checking for report file: $REPORT_FILE"
           if [ -f "$REPORT_FILE" ]; then
             echo "AI analysis completed successfully: $REPORT_FILE"
+            echo "Report file size: $(wc -c < "$REPORT_FILE") bytes"
             echo "report-path=$REPORT_FILE" >> $GITHUB_OUTPUT
             echo "## AI Result Analysis" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
@@ -446,11 +469,14 @@ runs:
             head -30 "$REPORT_FILE" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           else
-            echo "Warning: AI analysis completed but report file not found"
+            echo "Warning: AI analysis completed but report file not found at: $REPORT_FILE"
+            echo "Listing $OUTPUT_DIR contents:"
+            ls -la "$OUTPUT_DIR" || echo "Directory does not exist"
             echo "report-path=" >> $GITHUB_OUTPUT
           fi
         else
-          echo "Warning: AI result analysis failed, but test continues"
+          EXIT_CODE=$?
+          echo "Warning: AI result analysis failed with exit code: $EXIT_CODE"
           echo "report-path=" >> $GITHUB_OUTPUT
         fi
       shell: bash

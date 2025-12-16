@@ -17,18 +17,52 @@ function parseK6Results(resultsPath) {
     throw new Error(`k6 results file not found: ${resultsPath}`);
   }
   
-  const content = fs.readFileSync(resultsPath, 'utf8');
+  const content = fs.readFileSync(resultsPath, 'utf8').trim();
+  
+  if (!content || content.length === 0) {
+    throw new Error(`k6 results file is empty: ${resultsPath}`);
+  }
+  
   let results;
   
   try {
     results = JSON.parse(content);
   } catch (e) {
-    throw new Error(`Invalid JSON in results file: ${e.message}`);
+    throw new Error(`Invalid JSON in results file: ${e.message}. File content preview: ${content.substring(0, 200)}`);
   }
   
-  // Extract root metrics
-  const rootMetrics = results.root_group?.checks || {};
-  const metrics = results.metrics || {};
+  if (!results || (typeof results !== 'object' && !Array.isArray(results))) {
+    throw new Error(`k6 results file does not contain valid JSON object or array. Got type: ${typeof results}`);
+  }
+  
+  // k6 JSON output can be in different formats
+  // Format 1: Summary format with metrics at root
+  // Format 2: Full format with root_group
+  // Format 3: Array of data points (streaming format)
+  
+  let metrics = {};
+  let rootMetrics = {};
+  
+  if (Array.isArray(results)) {
+    // Streaming format - take the last entry which is usually the summary
+    if (results.length > 0) {
+      const lastEntry = results[results.length - 1];
+      metrics = lastEntry.metrics || lastEntry || {};
+      rootMetrics = lastEntry.root_group?.checks || lastEntry.checks || {};
+    }
+  } else if (results.metrics) {
+    // Standard summary format
+    metrics = results.metrics;
+    rootMetrics = results.root_group?.checks || results.checks || {};
+  } else if (results.root_group) {
+    // Full format
+    metrics = results.metrics || {};
+    rootMetrics = results.root_group.checks || {};
+  } else {
+    // Try to use results directly as metrics
+    metrics = results;
+    rootMetrics = {};
+  }
   
   // Parse HTTP request metrics
   const httpReqMetrics = metrics.http_req_duration || {};
@@ -59,13 +93,23 @@ function parseK6Results(resultsPath) {
   }
   
   // Extract test configuration
-  const testConfig = {
-    options: results.state?.testRunDurationMs ? {
-      duration: `${Math.round(results.state.testRunDurationMs / 1000)}s`,
+  let testConfig = { options: null };
+  
+  if (results.state) {
+    testConfig.options = {
+      duration: results.state.testRunDurationMs 
+        ? `${Math.round(results.state.testRunDurationMs / 1000)}s`
+        : null,
       vus: results.state.vus || 0,
       maxVus: results.state.maxVus || 0
-    } : null
-  };
+    };
+  } else if (results.testRunDurationMs) {
+    testConfig.options = {
+      duration: `${Math.round(results.testRunDurationMs / 1000)}s`,
+      vus: results.vus || 0,
+      maxVus: results.maxVus || 0
+    };
+  }
   
   // Parse summary data
   const summary = {
@@ -125,9 +169,10 @@ function parseK6Results(resultsPath) {
       http_reqs: httpReqsMetrics.values || {}
     },
     metadata: {
-      timestamp: results.state?.timestamp || new Date().toISOString(),
-      testType: results.state?.testRunDurationMs ? 'duration-based' : 'vu-based',
-      thresholds: Object.keys(thresholds)
+      timestamp: results.state?.timestamp || results.timestamp || new Date().toISOString(),
+      testType: (results.state?.testRunDurationMs || results.testRunDurationMs) ? 'duration-based' : 'vu-based',
+      thresholds: Object.keys(thresholds),
+      rawFormat: Array.isArray(results) ? 'streaming' : (results.metrics ? 'summary' : 'full')
     }
   };
 }
