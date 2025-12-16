@@ -65,6 +65,10 @@ inputs:
     description: 'Maximum retry attempts for AI API calls (default: 2)'
     required: false
     default: '2'
+  api-metadata-file:
+    description: 'Path to API metadata JSON file containing domain, business impact, and endpoint-specific information (optional)'
+    required: false
+    default: ''
 
 outputs:
   k6-script-path:
@@ -185,8 +189,17 @@ runs:
         # Export NODE_PATH if we installed packages
         export NODE_PATH=/tmp/node_modules:$NODE_PATH || true
         
+        # Check if metadata file is provided
+        METADATA_FILE="${{ inputs.api-metadata-file }}"
+        if [ -n "$METADATA_FILE" ] && [ -f "$METADATA_FILE" ]; then
+          echo "Using metadata file: $METADATA_FILE"
+        else
+          echo "No metadata file provided or file not found. Proceeding without metadata."
+          METADATA_FILE=""
+        fi
+        
         echo "Running AI profile generation..."
-        if node "$SCRIPT_PATH" "$COLLECTION_FILE" "$AI_CONFIG" "$OUTPUT_FILE"; then
+        if node "$SCRIPT_PATH" "$COLLECTION_FILE" "$AI_CONFIG" "$OUTPUT_FILE" "$METADATA_FILE"; then
           if [ -f "$OUTPUT_FILE" ]; then
             echo "AI profile generated successfully: $OUTPUT_FILE"
             echo "profile-path=$OUTPUT_FILE" >> $GITHUB_OUTPUT

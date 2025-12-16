@@ -10,6 +10,7 @@
 const fs = require('fs');
 const path = require('path');
 const { analyzeCollection, formatAnalysisForAI } = require('./analyze-collection');
+const { parseMetadata, formatMetadataForAI } = require('./parse-metadata');
 const { callAI } = require('./ai-utils');
 
 /**
@@ -39,8 +40,9 @@ function extractYAML(response) {
 /**
  * Generate AI prompt for profile generation
  */
-function generateProfilePrompt(analysis) {
-  const analysisText = formatAnalysisForAI(analysis);
+function generateProfilePrompt(analysis, metadata = null) {
+  const metadataText = metadata ? formatMetadataForAI(metadata, analysis) : '';
+  const analysisText = formatAnalysisForAI(analysis, metadataText);
   
   return `You are a performance testing expert. Analyze this Postman collection and suggest optimal load testing configuration.
 
@@ -51,6 +53,9 @@ Based on this analysis, please suggest appropriate load testing profiles. Consid
 2. API complexity affects how aggressively we can ramp up virtual users
 3. Authentication requirements may add overhead
 4. CRUD vs read-heavy patterns affect test duration
+5. Domain context (e.g., payment APIs need stricter thresholds, analytics can be more lenient)
+6. Business impact and criticality (critical endpoints need more conservative load profiles)
+7. Expected traffic patterns and peak hours (if provided)
 
 Please generate YAML configuration for load profiles following this exact structure:
 
@@ -129,15 +134,26 @@ You always provide practical, production-ready recommendations based on API comp
 /**
  * Generate load profile using AI
  */
-async function generateProfile(collectionPath, aiConfig, outputPath = null) {
+async function generateProfile(collectionPath, aiConfig, outputPath = null, metadataPath = null) {
   try {
     console.log(`Analyzing collection: ${collectionPath}`);
     const analysis = analyzeCollection(collectionPath);
     
     console.log(`Collection analyzed: ${analysis.totalEndpoints} endpoints, complexity: ${analysis.patterns.complexity}`);
     
+    // Parse metadata if provided
+    let metadata = null;
+    if (metadataPath && fs.existsSync(metadataPath)) {
+      console.log(`Parsing metadata from: ${metadataPath}`);
+      const { parseMetadata } = require('./parse-metadata');
+      metadata = parseMetadata(metadataPath);
+      if (metadata) {
+        console.log(`Metadata loaded: domain=${metadata.domain || 'N/A'}, endpoints=${metadata.endpoints?.length || 0}`);
+      }
+    }
+    
     console.log('Generating load profile suggestions using AI...');
-    const prompt = generateProfilePrompt(analysis);
+    const prompt = generateProfilePrompt(analysis, metadata);
     const response = await callAI(aiConfig, prompt, SYSTEM_PROMPT);
     
     // Extract YAML from response
@@ -177,10 +193,11 @@ if (require.main === module) {
   const collectionPath = process.argv[2];
   const aiConfigJson = process.argv[3];
   const outputPath = process.argv[4] || '.k6-config/ai-suggested-profile.yaml';
+  const metadataPath = process.argv[5] || null;
   
   if (!collectionPath || !aiConfigJson) {
-    console.error('Usage: node ai-profile-generator.js <collection-file> <ai-config-json> [output-path]');
-    console.error('Example: node ai-profile-generator.js collection.json \'{"provider":"openai","apiKey":"sk-...","model":"gpt-4"}\'');
+    console.error('Usage: node ai-profile-generator.js <collection-file> <ai-config-json> [output-path] [metadata-file]');
+    console.error('Example: node ai-profile-generator.js collection.json \'{"provider":"openai","apiKey":"sk-...","model":"gpt-4"}\' .k6-config/profile.yaml metadata.json');
     process.exit(1);
   }
   
@@ -192,7 +209,7 @@ if (require.main === module) {
     process.exit(1);
   }
   
-  generateProfile(collectionPath, aiConfig, outputPath)
+  generateProfile(collectionPath, aiConfig, outputPath, metadataPath)
     .then(result => {
       if (result.success) {
         console.log('\n=== AI-Generated Load Profile ===\n');

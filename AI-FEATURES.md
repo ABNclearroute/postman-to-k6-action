@@ -20,11 +20,14 @@ Automatically analyzes your Postman collection and suggests optimal load testing
 **What it does:**
 - Analyzes collection structure (endpoints, HTTP methods, complexity)
 - Detects patterns (CRUD operations, RESTful APIs, authentication requirements)
+- Incorporates domain context and business impact (if metadata provided)
+- Extracts domain information from API URLs (if metadata not provided)
 - Suggests appropriate load profiles with optimal:
   - Virtual user counts
   - Ramp-up patterns
   - Test durations
   - Performance thresholds
+  - Domain-specific considerations (e.g., payment APIs need stricter thresholds)
 
 **When to use:**
 - Starting load testing for a new API
@@ -49,6 +52,73 @@ Analyzes k6 test results to provide comprehensive insights and recommendations.
 - Want automated insights and recommendations
 - Identifying performance issues and optimization opportunities
 
+## API Metadata File (Optional)
+
+To provide better context for AI-powered load profile generation, you can optionally provide a metadata file containing domain information, business context, and endpoint-specific business impact.
+
+### Metadata File Format
+
+Create a JSON file (e.g., `api-metadata.json`) with the following structure:
+
+```json
+{
+  "domain": "e-commerce",
+  "businessContext": {
+    "industry": "retail",
+    "criticality": "high",
+    "peakHours": "09:00-21:00",
+    "expectedTraffic": "high",
+    "description": "E-commerce platform serving retail customers"
+  },
+  "endpoints": [
+    {
+      "name": "Get Product Details",
+      "path": "/products/{id}",
+      "method": "GET",
+      "businessImpact": "high",
+      "criticality": "critical",
+      "sla": "p95<500ms",
+      "expectedRps": 500,
+      "description": "Customer-facing product page endpoint"
+    }
+  ]
+}
+```
+
+### Supported Fields
+
+**Top-level:**
+- `domain`: API domain (e.g., "e-commerce", "payment", "healthcare", "finance", "analytics")
+- `businessContext`: Overall business context (optional)
+  - `industry`: Industry type
+  - `criticality`: Overall criticality level ("critical", "high", "medium", "low")
+  - `peakHours`: Peak traffic hours (e.g., "09:00-17:00", "24/7")
+  - `expectedTraffic`: Expected traffic level ("low", "medium", "high", "very-high")
+  - `description`: Business context description
+
+**Endpoints array:**
+- `name`: Endpoint name (matches Postman request name)
+- `path`: API path pattern (supports `{id}` placeholders)
+- `method`: HTTP method (GET, POST, etc.)
+- `businessImpact`: Business impact level ("critical", "high", "medium", "low")
+- `criticality`: Endpoint criticality ("critical", "high", "medium", "low")
+- `sla`: Performance SLA (e.g., "p95<500ms")
+- `expectedRps`: Expected requests per second
+- `description`: Endpoint description
+
+### Benefits
+
+When metadata is provided, the AI can:
+- Generate domain-specific load profiles (e.g., stricter thresholds for payment APIs)
+- Consider business criticality when setting VU counts and thresholds
+- Account for expected traffic patterns and peak hours
+- Apply endpoint-specific recommendations based on business impact
+- Suggest more appropriate SLAs and thresholds
+
+**Without metadata:** The AI will infer domain from API URLs and use general best practices.
+
+See `api-metadata.example.json` for a complete example.
+
 ## Configuration
 
 ### GitHub Actions
@@ -66,6 +136,8 @@ Analyzes k6 test results to provide comprehensive insights and recommendations.
     ai-api-key: ${{ secrets.OPENAI_API_KEY }}
     ai-provider: 'openai'
     ai-model: 'gpt-4'
+    # Optional: Provide metadata for better AI recommendations
+    api-metadata-file: 'api-metadata.json'
 ```
 
 #### Using OpenAI (Default)
@@ -248,7 +320,7 @@ load-test:
     # Profile generation disabled - uses manually selected profile
 ```
 
-### Example 3: Both AI Features Enabled
+### Example 3: Both AI Features Enabled with Metadata
 
 ```yaml
 - uses: your-org/postman-to-k6-action@v1
@@ -261,6 +333,7 @@ load-test:
     ai-model: 'gpt-4'
     ai-timeout: '60000'
     ai-max-retries: '3'
+    api-metadata-file: 'api-metadata.json'  # Optional: for better AI recommendations
 ```
 
 ## Generated Files

@@ -1,0 +1,73 @@
+{
+  "domain": "e-commerce",
+  "businessContext": {
+    "industry": "retail",
+    "criticality": "high",
+    "peakHours": "09:00-21:00",
+    "expectedTraffic": "high",
+    "description": "E-commerce platform serving retail customers with high traffic during business hours"
+  },
+  "endpoints": [
+    {
+      "name": "Get Product Details",
+      "path": "/products/{id}",
+      "method": "GET",
+      "businessImpact": "high",
+      "criticality": "critical",
+      "sla": "p95<500ms",
+      "expectedRps": 500,
+      "description": "Customer-facing product page endpoint. Critical for sales conversion."
+    },
+    {
+      "name": "Add to Cart",
+      "path": "/cart",
+      "method": "POST",
+      "businessImpact": "critical",
+      "criticality": "critical",
+      "sla": "p95<300ms",
+      "expectedRps": 200,
+      "description": "Transaction endpoint. Directly impacts revenue. Must be highly available."
+    },
+    {
+      "name": "Checkout",
+      "path": "/checkout",
+      "method": "POST",
+      "businessImpact": "critical",
+      "criticality": "critical",
+      "sla": "p95<1000ms",
+      "expectedRps": 50,
+      "description": "Payment processing endpoint. Highest criticality. Requires strict SLA."
+    },
+    {
+      "name": "Get User Profile",
+      "path": "/users/{id}",
+      "method": "GET",
+      "businessImpact": "medium",
+      "criticality": "medium",
+      "sla": "p95<1000ms",
+      "expectedRps": 100,
+      "description": "User profile endpoint. Important but not critical for core business."
+    },
+    {
+      "name": "Search Products",
+      "path": "/products/search",
+      "method": "GET",
+      "businessImpact": "high",
+      "criticality": "high",
+      "sla": "p95<800ms",
+      "expectedRps": 300,
+      "description": "Product search functionality. High impact on user experience and discovery."
+    },
+    {
+      "name": "Get Analytics",
+      "path": "/analytics",
+      "method": "GET",
+      "businessImpact": "low",
+      "criticality": "low",
+      "sla": "p95<2000ms",
+      "expectedRps": 10,
+      "description": "Internal analytics endpoint. Low priority, can tolerate higher latency."
+    }
+  ]
+}
+

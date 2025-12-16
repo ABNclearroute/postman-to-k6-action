@@ -84,6 +84,7 @@ jobs:
 | `ai-base-url` | Custom API base URL for local models | No | provider default |
 | `ai-timeout` | AI API request timeout (ms) | No | `30000` |
 | `ai-max-retries` | Maximum retry attempts for AI API calls | No | `2` |
+| `api-metadata-file` | Path to API metadata JSON file (domain, business impact) | No | `''` |
 
 > **Note**: AI features are optional and disabled by default. See [AI Features Documentation](AI-FEATURES.md) for details.
 
@@ -94,8 +95,6 @@ jobs:
 | `k6-script-path` | Path to the generated k6 script |
 | `test-status` | Success or failure status of the test |
 | `metrics-url` | Link to metrics (if using k6 cloud) |
-| `ai-suggested-profile` | Path to AI-generated load profile (if AI profile generation enabled) |
-| `ai-insights-report` | Path to AI insights report (if AI result analysis enabled) |
 | `ai-suggested-profile` | Path to AI-generated load profile (if AI profile generation enabled) |
 | `ai-insights-report` | Path to AI insights report (if AI result analysis enabled) |
 

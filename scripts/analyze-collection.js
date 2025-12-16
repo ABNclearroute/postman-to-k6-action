@@ -172,6 +172,7 @@ function analyzeCollection(collectionPath) {
     requests: requests.map(r => ({
       name: r.name,
       method: r.method,
+      url: r.url,
       hasBody: r.hasBody,
       hasTests: r.hasTests
     })),
@@ -198,8 +199,8 @@ function analyzeCollection(collectionPath) {
 /**
  * Format analysis for AI prompt
  */
-function formatAnalysisForAI(analysis) {
-  return `
+function formatAnalysisForAI(analysis, metadataText = '') {
+  let formatted = `
 Collection Analysis Summary:
 - Collection Name: ${analysis.collectionName}
 - Total Endpoints: ${analysis.totalEndpoints}
@@ -215,6 +216,12 @@ Collection Analysis Summary:
 - Requests with Body: ${analysis.requests.filter(r => r.hasBody).length}
 - Requests with Tests: ${analysis.requests.filter(r => r.hasTests).length}
 `;
+
+  if (metadataText) {
+    formatted += metadataText;
+  }
+
+  return formatted;
 }
 
 // CLI usage
