@@ -154,8 +154,12 @@ function matchEndpointToMetadata(request, metadata) {
         return false;
       }
       if (ep.path) {
-        // Simple path matching (can be enhanced with regex)
-        const epPath = ep.path.replace(/\{[^}]+\}/g, '[^/]+');
+        // Escape regex metacharacters, then replace placeholders with a segment matcher.
+        const placeholderToken = '__PLACEHOLDER__';
+        const escaped = ep.path
+          .replace(/\{[^}]+\}/g, placeholderToken) // temporarily mark placeholders
+          .replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // escape regex chars
+        const epPath = escaped.replace(new RegExp(placeholderToken, 'g'), '[^/]+');
         const regex = new RegExp(`^${epPath}$`);
         return regex.test(urlPath);
       }
