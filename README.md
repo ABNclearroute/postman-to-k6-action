@@ -15,6 +15,7 @@ A reusable GitHub Action and GitLab CI template that automatically converts Post
 - **Flexible Configuration**: Customize load profiles via YAML configuration
 - **Reusable**: Use as a composite action in any GitHub repository
 - **Comprehensive Reporting**: Automatic artifact upload and test results
+- **AI-Powered (Optional)**: Intelligent load profile generation and result analysis using AI (see [AI Features](AI-FEATURES.md))
 
 ## Quick Start
 
@@ -75,6 +76,16 @@ jobs:
 | `environment-file` | Path to Postman environment file | No | `''` |
 | `profiles-config` | Path to load profiles configuration YAML | No | `profiles/load-profiles.yaml` |
 | `node-version` | Node.js version for conversion | No | `18` |
+| `enable-ai-profile-generation` | Enable AI-powered load profile generation | No | `false` |
+| `enable-ai-result-analysis` | Enable AI-powered result analysis | No | `false` |
+| `ai-api-key` | API key for AI provider | Conditional | `''` |
+| `ai-provider` | AI provider: `openai`, `claude`, or `local` | No | `openai` |
+| `ai-model` | AI model to use (provider-specific) | No | provider default |
+| `ai-base-url` | Custom API base URL for local models | No | provider default |
+| `ai-timeout` | AI API request timeout (ms) | No | `30000` |
+| `ai-max-retries` | Maximum retry attempts for AI API calls | No | `2` |
+
+> **Note**: AI features are optional and disabled by default. See [AI Features Documentation](AI-FEATURES.md) for details.
 
 ## Outputs
 
@@ -83,6 +94,10 @@ jobs:
 | `k6-script-path` | Path to the generated k6 script |
 | `test-status` | Success or failure status of the test |
 | `metrics-url` | Link to metrics (if using k6 cloud) |
+| `ai-suggested-profile` | Path to AI-generated load profile (if AI profile generation enabled) |
+| `ai-insights-report` | Path to AI insights report (if AI result analysis enabled) |
+| `ai-suggested-profile` | Path to AI-generated load profile (if AI profile generation enabled) |
+| `ai-insights-report` | Path to AI insights report (if AI result analysis enabled) |
 
 ## Load Profiles
 

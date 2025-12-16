@@ -1,0 +1,192 @@
+name: Test AI Features (Manual)
+
+# Manual workflow for testing AI features with configurable parameters
+# This workflow allows you to test AI features with different providers and configurations
+
+on:
+  workflow_dispatch:
+    inputs:
+      # Basic configuration
+      postman_collection:
+        description: 'Path to Postman collection JSON file'
+        required: true
+        default: 'postman/collection.json'
+        type: string
+      
+      load_profile:
+        description: 'Load profile type (smoke, load, stress, spike)'
+        required: false
+        default: 'smoke'
+        type: choice
+        options:
+          - smoke
+          - load
+          - stress
+          - spike
+      
+      # AI Profile Generation
+      enable_ai_profile_generation:
+        description: 'Enable AI-powered load profile generation'
+        required: false
+        default: false
+        type: boolean
+      
+      # AI Result Analysis
+      enable_ai_result_analysis:
+        description: 'Enable AI-powered result analysis'
+        required: false
+        default: false
+        type: boolean
+      
+      # AI Provider Configuration
+      ai_provider:
+        description: 'AI provider (openai, claude, local)'
+        required: false
+        default: 'local'
+        type: choice
+        options:
+          - openai
+          - claude
+          - local
+      
+      ai_api_key:
+        description: 'AI API Key (use secrets in production!)'
+        required: false
+        default: ''
+        type: string
+      
+      ai_model:
+        description: 'AI model name (provider-specific)'
+        required: false
+        default: 'sonar'
+        type: string
+      
+      ai_base_url:
+        description: 'Custom API base URL (for local/Perplexity)'
+        required: false
+        default: 'https://api.perplexity.ai'
+        type: string
+      
+      ai_timeout:
+        description: 'AI API timeout in milliseconds'
+        required: false
+        default: '30000'
+        type: string
+      
+      ai_max_retries:
+        description: 'Maximum retry attempts for AI API calls'
+        required: false
+        default: '2'
+        type: string
+
+jobs:
+  test-ai-features:
+    name: Test AI Features
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Display Configuration
+        run: |
+          echo "## AI Test Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Postman Collection:** ${{ inputs.postman_collection }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Load Profile:** ${{ inputs.load_profile }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### AI Features" >> $GITHUB_STEP_SUMMARY
+          echo "- **Profile Generation:** ${{ inputs.enable_ai_profile_generation }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Result Analysis:** ${{ inputs.enable_ai_result_analysis }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### AI Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "- **Provider:** ${{ inputs.ai_provider }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Model:** ${{ inputs.ai_model }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Base URL:** ${{ inputs.ai_base_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Timeout:** ${{ inputs.ai_timeout }}ms" >> $GITHUB_STEP_SUMMARY
+          echo "- **Max Retries:** ${{ inputs.ai_max_retries }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ inputs.ai_api_key }}" ]; then
+            MASKED_KEY=$(echo "${{ inputs.ai_api_key }}" | sed 's/\(.\{4\}\).*\(.\{4\}\)/\1***\2/')
+            echo "- **API Key:** $MASKED_KEY (configured)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **API Key:** Not provided" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Run Postman to k6 Load Test with AI
+        id: run-test
+        uses: ./
+        with:
+          postman-collection: ${{ inputs.postman_collection }}
+          load-profile: ${{ inputs.load_profile }}
+          # AI Profile Generation
+          enable-ai-profile-generation: ${{ inputs.enable_ai_profile_generation }}
+          # AI Result Analysis
+          enable-ai-result-analysis: ${{ inputs.enable_ai_result_analysis }}
+          # AI Configuration
+          ai-provider: ${{ inputs.ai_provider }}
+          ai-api-key: ${{ inputs.ai_api_key }}
+          ai-model: ${{ inputs.ai_model }}
+          ai-base-url: ${{ inputs.ai_base_url }}
+          ai-timeout: ${{ inputs.ai_timeout }}
+          ai-max-retries: ${{ inputs.ai_max_retries }}
+
+      - name: Display Results Summary
+        if: always()
+        run: |
+          echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Test Status:** ${{ steps.run-test.outputs.test-status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**k6 Script:** ${{ steps.run-test.outputs.k6-script-path }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ inputs.enable_ai_profile_generation }}" == "true" ]; then
+            echo "### AI Profile Generation" >> $GITHUB_STEP_SUMMARY
+            if [ -n "${{ steps.run-test.outputs.ai-suggested-profile }}" ]; then
+              echo "✅ **Profile Generated:** ${{ steps.run-test.outputs.ai-suggested-profile }}" >> $GITHUB_STEP_SUMMARY
+              if [ -f "${{ steps.run-test.outputs.ai-suggested-profile }}" ]; then
+                echo "" >> $GITHUB_STEP_SUMMARY
+                echo "\`\`\`yaml" >> $GITHUB_STEP_SUMMARY
+                head -30 "${{ steps.run-test.outputs.ai-suggested-profile }}" >> $GITHUB_STEP_SUMMARY
+                echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+              fi
+            else
+              echo "⚠️ Profile generation did not produce output" >> $GITHUB_STEP_SUMMARY
+            fi
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ inputs.enable_ai_result_analysis }}" == "true" ]; then
+            echo "### AI Result Analysis" >> $GITHUB_STEP_SUMMARY
+            if [ -n "${{ steps.run-test.outputs.ai-insights-report }}" ]; then
+              echo "✅ **Report Generated:** ${{ steps.run-test.outputs.ai-insights-report }}" >> $GITHUB_STEP_SUMMARY
+              if [ -f "${{ steps.run-test.outputs.ai-insights-report }}" ]; then
+                echo "" >> $GITHUB_STEP_SUMMARY
+                echo "\`\`\`markdown" >> $GITHUB_STEP_SUMMARY
+                head -40 "${{ steps.run-test.outputs.ai-insights-report }}" >> $GITHUB_STEP_SUMMARY
+                echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+              fi
+            else
+              echo "⚠️ Result analysis did not produce output" >> $GITHUB_STEP_SUMMARY
+            fi
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "Check the workflow artifacts for:" >> $GITHUB_STEP_SUMMARY
+          echo "- Generated k6 scripts" >> $GITHUB_STEP_SUMMARY
+          echo "- AI-generated profiles (if enabled)" >> $GITHUB_STEP_SUMMARY
+          echo "- AI insights reports (if enabled)" >> $GITHUB_STEP_SUMMARY
+          echo "- k6 test results" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload Test Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-test-results-${{ inputs.load_profile }}-${{ github.run_id }}
+          path: |
+            k6-script*.js
+            .k6-config/
+          retention-days: 7
+          if-no-files-found: ignore
+

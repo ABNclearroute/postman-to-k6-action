@@ -8,6 +8,14 @@ variables:
   PROFILES_CONFIG: "profiles/load-profiles.yaml"
   K6_OPTIONS: ""
   ENVIRONMENT_FILE: ""
+  ENABLE_AI_PROFILE_GENERATION: "false"
+  ENABLE_AI_RESULT_ANALYSIS: "false"
+  AI_API_KEY: ""
+  AI_PROVIDER: "openai"
+  AI_MODEL: ""
+  AI_BASE_URL: ""
+  AI_TIMEOUT: "30000"
+  AI_MAX_RETRIES: "2"
 
 # Base template for postman-to-k6 load testing
 .postman-to-k6-base:
@@ -31,6 +39,16 @@ variables:
       cp /tmp/k6-${K6_VERSION}-linux-amd64/k6 /usr/local/bin/k6
       chmod +x /usr/local/bin/k6
       rm -rf /tmp/k6*
+    # Install AI dependencies (if AI features enabled)
+    - |
+      if [ "$ENABLE_AI_PROFILE_GENERATION" == "true" ] || [ "$ENABLE_AI_RESULT_ANALYSIS" == "true" ]; then
+        echo "Installing AI dependencies..."
+        npm install --prefix /tmp openai
+        if [ "$AI_PROVIDER" == "claude" ]; then
+          npm install --prefix /tmp @anthropic-ai/sdk || echo "Warning: Could not install Claude SDK"
+        fi
+        export NODE_PATH=/tmp/node_modules:$NODE_PATH
+      fi
   script:
     # Validate Postman collection
     - |
@@ -43,6 +61,44 @@ variables:
         exit 1
       fi
       echo "Postman collection validated successfully"
+    # Analyze collection with AI and generate load profile (if enabled)
+    - |
+      if [ "$ENABLE_AI_PROFILE_GENERATION" == "true" ]; then
+        if [ -z "$AI_API_KEY" ]; then
+          echo "Warning: AI profile generation enabled but AI_API_KEY not provided. Skipping AI analysis."
+        else
+          OUTPUT_DIR=".k6-config"
+          OUTPUT_FILE="$OUTPUT_DIR/ai-suggested-profile.yaml"
+          mkdir -p "$OUTPUT_DIR"
+          
+          AI_CONFIG="{"
+          AI_CONFIG="$AI_CONFIG\"provider\":\"$AI_PROVIDER\","
+          AI_CONFIG="$AI_CONFIG\"apiKey\":\"$AI_API_KEY\","
+          if [ -n "$AI_MODEL" ]; then
+            AI_CONFIG="$AI_CONFIG\"model\":\"$AI_MODEL\","
+          fi
+          if [ -n "$AI_BASE_URL" ]; then
+            AI_CONFIG="$AI_CONFIG\"baseUrl\":\"$AI_BASE_URL\","
+          fi
+          AI_CONFIG="$AI_CONFIG\"timeout\":$AI_TIMEOUT,"
+          AI_CONFIG="$AI_CONFIG\"maxRetries\":$AI_MAX_RETRIES"
+          AI_CONFIG="$AI_CONFIG}"
+          
+          SCRIPT_PATH=""
+          for path in "scripts/ai-profile-generator.js" "./scripts/ai-profile-generator.js"; do
+            if [ -f "$path" ]; then
+              SCRIPT_PATH="$path"
+              break
+            fi
+          done
+          
+          if [ -n "$SCRIPT_PATH" ] && [ -f "$SCRIPT_PATH" ]; then
+            export NODE_PATH=/tmp/node_modules:$NODE_PATH || true
+            echo "Running AI profile generation..."
+            node "$SCRIPT_PATH" "$POSTMAN_COLLECTION" "$AI_CONFIG" "$OUTPUT_FILE" || echo "Warning: AI profile generation failed, continuing with default profile"
+          fi
+        fi
+      fi
     # Convert Postman collection to k6 script
     - |
       OUTPUT_FILE="k6-script-$(date +%s).js"
@@ -139,6 +195,14 @@ variables:
     - |
       SCRIPT_FILE=$(cat k6-script-path.txt)
       ADDITIONAL_OPTIONS="$K6_OPTIONS"
+      
+      # Add JSON output if AI result analysis is enabled
+      if [ "$ENABLE_AI_RESULT_ANALYSIS" == "true" ]; then
+        mkdir -p .k6-config
+        ADDITIONAL_OPTIONS="$ADDITIONAL_OPTIONS --out json=.k6-config/k6-results.json"
+        echo "k6 results will be saved to .k6-config/k6-results.json for AI analysis"
+      fi
+      
       echo "Running k6 test with profile: $LOAD_PROFILE"
       echo "Script: $SCRIPT_FILE"
       if k6 run $ADDITIONAL_OPTIONS "$SCRIPT_FILE"; then
@@ -146,6 +210,48 @@ variables:
       else
         echo "status=failure" > test-status.txt
         exit 1
+      fi
+    # Analyze test results with AI (if enabled)
+    - |
+      if [ "$ENABLE_AI_RESULT_ANALYSIS" == "true" ] && [ -f test-status.txt ] && grep -q "status=success" test-status.txt; then
+        if [ -z "$AI_API_KEY" ]; then
+          echo "Warning: AI result analysis enabled but AI_API_KEY not provided. Skipping AI analysis."
+        else
+          RESULTS_FILE=".k6-config/k6-results.json"
+          OUTPUT_DIR=".k6-config"
+          
+          if [ -f "$RESULTS_FILE" ]; then
+            AI_CONFIG="{"
+            AI_CONFIG="$AI_CONFIG\"provider\":\"$AI_PROVIDER\","
+            AI_CONFIG="$AI_CONFIG\"apiKey\":\"$AI_API_KEY\","
+            if [ -n "$AI_MODEL" ]; then
+              AI_CONFIG="$AI_CONFIG\"model\":\"$AI_MODEL\","
+            fi
+            if [ -n "$AI_BASE_URL" ]; then
+              AI_CONFIG="$AI_CONFIG\"baseUrl\":\"$AI_BASE_URL\","
+            fi
+            AI_CONFIG="$AI_CONFIG\"timeout\":$AI_TIMEOUT,"
+            AI_CONFIG="$AI_CONFIG\"maxRetries\":$AI_MAX_RETRIES"
+            AI_CONFIG="$AI_CONFIG}"
+            
+            SCRIPT_PATH=""
+            for path in "scripts/ai-result-analyzer.js" "./scripts/ai-result-analyzer.js"; do
+              if [ -f "$path" ]; then
+                SCRIPT_PATH="$path"
+                break
+              fi
+            done
+            
+            if [ -n "$SCRIPT_PATH" ] && [ -f "$SCRIPT_PATH" ]; then
+              export NODE_PATH=/tmp/node_modules:$NODE_PATH || true
+              PROFILE_NAME="$LOAD_PROFILE"
+              echo "Running AI result analysis for profile: $PROFILE_NAME"
+              node "$SCRIPT_PATH" "$RESULTS_FILE" "$AI_CONFIG" "$PROFILE_NAME" "$OUTPUT_DIR" || echo "Warning: AI result analysis failed"
+            fi
+          else
+            echo "Warning: k6 results file not found: $RESULTS_FILE. AI analysis skipped."
+          fi
+        fi
       fi
   artifacts:
     name: "k6-results-${LOAD_PROFILE}-${CI_PIPELINE_ID}"

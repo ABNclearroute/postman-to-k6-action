@@ -1,6 +1,9 @@
 name: 'Postman to k6 Load Testing'
 description: 'Convert Postman collections to k6 scripts and execute them with configurable load profiles'
-author: 'Your Name'
+author: 'ABNclearroute'
+branding:
+  icon: 'zap'
+  color: 'blue'
 
 inputs:
   postman-collection:
@@ -30,6 +33,38 @@ inputs:
     description: 'Node.js version to use for conversion'
     required: false
     default: '18'
+  enable-ai-profile-generation:
+    description: 'Enable AI-powered load profile generation (optional, default: false)'
+    required: false
+    default: 'false'
+  enable-ai-result-analysis:
+    description: 'Enable AI-powered result analysis (optional, default: false)'
+    required: false
+    default: 'false'
+  ai-api-key:
+    description: 'API key for AI provider (use secrets, e.g., ${{ secrets.OPENAI_API_KEY }})'
+    required: false
+    default: ''
+  ai-provider:
+    description: 'AI provider to use: openai, claude, or local (default: openai)'
+    required: false
+    default: 'openai'
+  ai-model:
+    description: 'AI model to use (provider-specific, optional)'
+    required: false
+    default: ''
+  ai-base-url:
+    description: 'Custom API base URL for local/self-hosted models'
+    required: false
+    default: ''
+  ai-timeout:
+    description: 'AI API request timeout in milliseconds (default: 30000)'
+    required: false
+    default: '30000'
+  ai-max-retries:
+    description: 'Maximum retry attempts for AI API calls (default: 2)'
+    required: false
+    default: '2'
 
 outputs:
   k6-script-path:
@@ -41,6 +76,12 @@ outputs:
   metrics-url:
     description: 'Link to metrics if using k6 cloud'
     value: ${{ steps.run-k6.outputs.metrics-url }}
+  ai-suggested-profile:
+    description: 'Path to AI-suggested load profile (if AI profile generation enabled)'
+    value: ${{ steps.ai-profile-generation.outputs.profile-path }}
+  ai-insights-report:
+    description: 'Path to AI insights report (if AI result analysis enabled)'
+    value: ${{ steps.ai-result-analysis.outputs.report-path }}
 
 runs:
   using: 'composite'
@@ -64,6 +105,20 @@ runs:
         chmod +x /usr/local/bin/yq
       shell: bash
 
+    - name: Install AI dependencies (if AI features enabled)
+      if: inputs.enable-ai-profile-generation == 'true' || inputs.enable-ai-result-analysis == 'true'
+      run: |
+        # Install npm packages for AI functionality
+        npm install --prefix /tmp openai
+        if [ "${{ inputs.ai-provider }}" == "claude" ]; then
+          npm install --prefix /tmp @anthropic-ai/sdk || echo "Warning: Could not install Claude SDK, may need manual installation"
+        fi
+        # Make scripts directory if needed
+        mkdir -p scripts
+        # Copy node_modules to a location scripts can access
+        export NODE_PATH=/tmp/node_modules:$NODE_PATH
+      shell: bash
+
     - name: Validate Postman collection
       id: validate-collection
       run: |
@@ -79,6 +134,77 @@ runs:
         fi
         
         echo "Postman collection validated successfully"
+      shell: bash
+
+    - name: Analyze collection with AI and generate load profile
+      if: inputs.enable-ai-profile-generation == 'true'
+      id: ai-profile-generation
+      env:
+        AI_API_KEY: ${{ inputs.ai-api-key }}
+      run: |
+        if [ -z "$AI_API_KEY" ]; then
+          echo "Warning: AI profile generation enabled but ai-api-key not provided. Skipping AI analysis."
+          echo "profile-path=" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        COLLECTION_FILE="${{ inputs.postman-collection }}"
+        OUTPUT_DIR=".k6-config"
+        OUTPUT_FILE="$OUTPUT_DIR/ai-suggested-profile.yaml"
+        mkdir -p "$OUTPUT_DIR"
+        
+        # Build AI config JSON
+        AI_CONFIG="{"
+        AI_CONFIG="$AI_CONFIG\"provider\":\"${{ inputs.ai-provider }}\","
+        AI_CONFIG="$AI_CONFIG\"apiKey\":\"$AI_API_KEY\","
+        if [ -n "${{ inputs.ai-model }}" ]; then
+          AI_CONFIG="$AI_CONFIG\"model\":\"${{ inputs.ai-model }}\","
+        fi
+        if [ -n "${{ inputs.ai-base-url }}" ]; then
+          AI_CONFIG="$AI_CONFIG\"baseUrl\":\"${{ inputs.ai-base-url }}\","
+        fi
+        AI_CONFIG="$AI_CONFIG\"timeout\":${{ inputs.ai-timeout }},"
+        AI_CONFIG="$AI_CONFIG\"maxRetries\":${{ inputs.ai-max-retries }}"
+        AI_CONFIG="$AI_CONFIG}"
+        
+        # Find script path
+        SCRIPT_PATH=""
+        for path in "scripts/ai-profile-generator.js" "${{ github.action_path }}/scripts/ai-profile-generator.js" "./scripts/ai-profile-generator.js"; do
+          if [ -f "$path" ]; then
+            SCRIPT_PATH="$path"
+            break
+          fi
+        done
+        
+        if [ -z "$SCRIPT_PATH" ] || [ ! -f "$SCRIPT_PATH" ]; then
+          echo "Error: ai-profile-generator.js script not found"
+          echo "profile-path=" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        # Export NODE_PATH if we installed packages
+        export NODE_PATH=/tmp/node_modules:$NODE_PATH || true
+        
+        echo "Running AI profile generation..."
+        if node "$SCRIPT_PATH" "$COLLECTION_FILE" "$AI_CONFIG" "$OUTPUT_FILE"; then
+          if [ -f "$OUTPUT_FILE" ]; then
+            echo "AI profile generated successfully: $OUTPUT_FILE"
+            echo "profile-path=$OUTPUT_FILE" >> $GITHUB_OUTPUT
+            echo "## AI-Generated Load Profile" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Profile saved to: \`$OUTPUT_FILE\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`yaml" >> $GITHUB_STEP_SUMMARY
+            head -20 "$OUTPUT_FILE" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Warning: AI profile generation completed but output file not found"
+            echo "profile-path=" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "Warning: AI profile generation failed, continuing with default profile selection"
+          echo "profile-path=" >> $GITHUB_OUTPUT
+        fi
       shell: bash
 
     - name: Convert Postman collection to k6 script
@@ -233,6 +359,13 @@ runs:
         
         ADDITIONAL_OPTIONS="${{ inputs.k6-options }}"
         
+        # Add JSON output if AI result analysis is enabled
+        if [ "${{ inputs.enable-ai-result-analysis }}" == "true" ]; then
+          mkdir -p .k6-config
+          ADDITIONAL_OPTIONS="$ADDITIONAL_OPTIONS --out json=.k6-config/k6-results.json"
+          echo "k6 results will be saved to .k6-config/k6-results.json for AI analysis"
+        fi
+        
         echo "Running k6 test with profile: ${{ inputs.load-profile }}"
         echo "Script: $SCRIPT_FILE"
         
@@ -242,6 +375,83 @@ runs:
         else
           echo "status=failure" >> $GITHUB_OUTPUT
           exit 1
+        fi
+      shell: bash
+
+    - name: Analyze test results with AI
+      if: inputs.enable-ai-result-analysis == 'true' && steps.run-k6.outputs.status == 'success'
+      id: ai-result-analysis
+      env:
+        AI_API_KEY: ${{ inputs.ai-api-key }}
+      run: |
+        if [ -z "$AI_API_KEY" ]; then
+          echo "Warning: AI result analysis enabled but ai-api-key not provided. Skipping AI analysis."
+          echo "report-path=" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        RESULTS_FILE=".k6-config/k6-results.json"
+        OUTPUT_DIR=".k6-config"
+        
+        if [ ! -f "$RESULTS_FILE" ]; then
+          echo "Warning: k6 results file not found: $RESULTS_FILE. AI analysis skipped."
+          echo "report-path=" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        # Build AI config JSON
+        AI_CONFIG="{"
+        AI_CONFIG="$AI_CONFIG\"provider\":\"${{ inputs.ai-provider }}\","
+        AI_CONFIG="$AI_CONFIG\"apiKey\":\"$AI_API_KEY\","
+        if [ -n "${{ inputs.ai-model }}" ]; then
+          AI_CONFIG="$AI_CONFIG\"model\":\"${{ inputs.ai-model }}\","
+        fi
+        if [ -n "${{ inputs.ai-base-url }}" ]; then
+          AI_CONFIG="$AI_CONFIG\"baseUrl\":\"${{ inputs.ai-base-url }}\","
+        fi
+        AI_CONFIG="$AI_CONFIG\"timeout\":${{ inputs.ai-timeout }},"
+        AI_CONFIG="$AI_CONFIG\"maxRetries\":${{ inputs.ai-max-retries }}"
+        AI_CONFIG="$AI_CONFIG}"
+        
+        # Find script path
+        SCRIPT_PATH=""
+        for path in "scripts/ai-result-analyzer.js" "${{ github.action_path }}/scripts/ai-result-analyzer.js" "./scripts/ai-result-analyzer.js"; do
+          if [ -f "$path" ]; then
+            SCRIPT_PATH="$path"
+            break
+          fi
+        done
+        
+        if [ -z "$SCRIPT_PATH" ] || [ ! -f "$SCRIPT_PATH" ]; then
+          echo "Error: ai-result-analyzer.js script not found"
+          echo "report-path=" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        # Export NODE_PATH if we installed packages
+        export NODE_PATH=/tmp/node_modules:$NODE_PATH || true
+        
+        PROFILE_NAME="${{ inputs.load-profile }}"
+        echo "Running AI result analysis for profile: $PROFILE_NAME"
+        if node "$SCRIPT_PATH" "$RESULTS_FILE" "$AI_CONFIG" "$PROFILE_NAME" "$OUTPUT_DIR"; then
+          REPORT_FILE="$OUTPUT_DIR/ai-insights-report.md"
+          if [ -f "$REPORT_FILE" ]; then
+            echo "AI analysis completed successfully: $REPORT_FILE"
+            echo "report-path=$REPORT_FILE" >> $GITHUB_OUTPUT
+            echo "## AI Result Analysis" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Full report: \`$REPORT_FILE\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            head -30 "$REPORT_FILE" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Warning: AI analysis completed but report file not found"
+            echo "report-path=" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "Warning: AI result analysis failed, but test continues"
+          echo "report-path=" >> $GITHUB_OUTPUT
         fi
       shell: bash
 
@@ -268,6 +478,7 @@ runs:
         path: |
           k6-script*.js
           .k6-config/
+          *.json
         retention-days: 30
         if-no-files-found: ignore
 

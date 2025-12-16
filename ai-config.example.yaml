@@ -1,0 +1,47 @@
+# AI Configuration Example
+# This file demonstrates how to configure AI features for the Postman-to-k6 action
+# Copy this file and customize for your use case
+
+# AI Provider Configuration
+providers:
+  openai:
+    base_url: "https://api.openai.com/v1"
+    default_model: "gpt-3.5-turbo"
+    # Available models: gpt-4, gpt-4-turbo-preview, gpt-3.5-turbo, etc.
+    timeout: 30000
+    max_retries: 2
+  
+  claude:
+    base_url: "https://api.anthropic.com"
+    default_model: "claude-3-sonnet-20240229"
+    # Available models: claude-3-opus-20240229, claude-3-sonnet-20240229, claude-3-haiku-20240307
+    timeout: 30000
+    max_retries: 2
+  
+  local:
+    # For OpenAI-compatible APIs (Ollama, LocalAI, etc.)
+    base_url: "http://localhost:11434/v1"  # Ollama default
+    default_model: "llama2"
+    timeout: 60000  # Longer timeout for local models
+    max_retries: 2
+
+# Default Prompts (customizable)
+prompts:
+  profile_generation:
+    system: "You are a performance testing expert specializing in load testing APIs."
+    # The user prompt is generated dynamically based on collection analysis
+  
+  result_analysis:
+    system: "You are an expert performance testing analyst with deep knowledge of load testing, API performance, and system scalability."
+
+# Rate Limiting (optional)
+rate_limiting:
+  enabled: false
+  requests_per_minute: 60
+  requests_per_day: 1000
+
+# Feature Flags (default: all disabled)
+features:
+  profile_generation: false
+  result_analysis: false
+
