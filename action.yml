@@ -374,6 +374,29 @@ runs:
         # Run k6 and capture output
         if k6 run $ADDITIONAL_OPTIONS "$SCRIPT_FILE"; then
           echo "status=success" >> $GITHUB_OUTPUT
+          
+          # Verify JSON results file was created if AI analysis is enabled
+          if [ "${{ inputs.enable-ai-result-analysis }}" == "true" ]; then
+            RESULTS_FILE=".k6-config/k6-results.json"
+            if [ -f "$RESULTS_FILE" ]; then
+              FILE_SIZE=$(wc -c < "$RESULTS_FILE" 2>/dev/null || echo "0")
+              echo "k6 results file created: $RESULTS_FILE (size: $FILE_SIZE bytes)"
+              if [ "$FILE_SIZE" -eq 0 ]; then
+                echo "Warning: k6 results file is empty"
+              else
+                # Quick validation that it's valid JSON
+                if jq empty "$RESULTS_FILE" 2>/dev/null; then
+                  echo "k6 results file is valid JSON"
+                else
+                  echo "Warning: k6 results file may not be valid JSON"
+                fi
+              fi
+            else
+              echo "Warning: k6 results file not found after test completion: $RESULTS_FILE"
+              echo "Listing .k6-config directory:"
+              ls -la .k6-config/ 2>/dev/null || echo "Directory does not exist"
+            fi
+          fi
         else
           echo "status=failure" >> $GITHUB_OUTPUT
           exit 1
@@ -408,7 +431,16 @@ runs:
         fi
         
         echo "Found results file: $RESULTS_FILE"
-        echo "File size: $(wc -c < "$RESULTS_FILE") bytes"
+        FILE_SIZE=$(wc -c < "$RESULTS_FILE")
+        echo "File size: $FILE_SIZE bytes"
+        
+        # Show first few lines of the file for debugging
+        if [ "$FILE_SIZE" -gt 0 ]; then
+          echo "First 500 characters of results file:"
+          head -c 500 "$RESULTS_FILE"
+          echo ""
+          echo ""
+        fi
         
         # Build AI config JSON
         AI_CONFIG="{"
@@ -453,8 +485,19 @@ runs:
         PROFILE_NAME="${{ inputs.load-profile }}"
         echo "Running AI result analysis for profile: $PROFILE_NAME"
         echo "Command: node \"$SCRIPT_PATH\" \"$RESULTS_FILE\" \"$AI_CONFIG\" \"$PROFILE_NAME\" \"$OUTPUT_DIR\""
+        echo ""
         
-        if node "$SCRIPT_PATH" "$RESULTS_FILE" "$AI_CONFIG" "$PROFILE_NAME" "$OUTPUT_DIR" 2>&1; then
+        # Run the script and capture both stdout and stderr
+        set +e  # Don't exit on error, we'll handle it
+        SCRIPT_OUTPUT=$(node "$SCRIPT_PATH" "$RESULTS_FILE" "$AI_CONFIG" "$PROFILE_NAME" "$OUTPUT_DIR" 2>&1)
+        SCRIPT_EXIT_CODE=$?
+        set -e
+        
+        echo "$SCRIPT_OUTPUT"
+        echo ""
+        echo "Script exit code: $SCRIPT_EXIT_CODE"
+        
+        if [ $SCRIPT_EXIT_CODE -eq 0 ]; then
           REPORT_FILE="$OUTPUT_DIR/ai-insights-report.md"
           echo "Checking for report file: $REPORT_FILE"
           if [ -f "$REPORT_FILE" ]; then

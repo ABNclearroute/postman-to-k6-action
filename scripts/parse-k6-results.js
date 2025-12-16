@@ -25,10 +25,28 @@ function parseK6Results(resultsPath) {
   
   let results;
   
+  // k6 JSON output can be:
+  // 1. Single JSON object (summary format)
+  // 2. Newline-delimited JSON (streaming format) - one JSON object per line
+  // 3. Array of JSON objects
+  
   try {
+    // Try parsing as single JSON object first
     results = JSON.parse(content);
   } catch (e) {
-    throw new Error(`Invalid JSON in results file: ${e.message}. File content preview: ${content.substring(0, 200)}`);
+    // If that fails, try newline-delimited JSON (NDJSON)
+    try {
+      const lines = content.split('\n').filter(line => line.trim());
+      if (lines.length > 0) {
+        // Try to parse the last line (usually the summary)
+        results = JSON.parse(lines[lines.length - 1]);
+        console.log(`Parsed NDJSON format, using last entry (${lines.length} total entries)`);
+      } else {
+        throw new Error('No valid JSON lines found');
+      }
+    } catch (e2) {
+      throw new Error(`Invalid JSON in results file. Single object parse error: ${e.message}. NDJSON parse error: ${e2.message}. File content preview: ${content.substring(0, 500)}`);
+    }
   }
   
   if (!results || (typeof results !== 'object' && !Array.isArray(results))) {
