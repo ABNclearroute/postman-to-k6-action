@@ -66,21 +66,28 @@ function parseMetadata(metadataPath) {
  * Extract domain from URL
  */
 function extractDomainFromUrl(url) {
-  if (!url || typeof url !== 'string') {
+  if (!url) {
     return null;
   }
 
   try {
-    // Handle Postman URL object format
-    let urlString = url;
-    if (typeof url === 'object') {
+    // Normalize to a string for URL parsing
+    let urlString = '';
+    if (typeof url === 'string') {
+      urlString = url;
+    } else if (typeof url === 'object') {
       if (url.raw) {
         urlString = url.raw;
       } else if (url.host && Array.isArray(url.host)) {
         urlString = `https://${url.host.join('.')}`;
+        if (url.path && Array.isArray(url.path) && url.path.length > 0) {
+          urlString += `/${url.path.join('/')}`;
+        }
       } else {
         return null;
       }
+    } else {
+      return null;
     }
 
     const urlObj = new URL(urlString);
